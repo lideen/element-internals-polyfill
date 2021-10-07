@@ -1,32 +1,21 @@
-import { hiddenInputMap, formsMap, formElementsMap, internalsMap } from './maps.js';
+import { hiddenInputMap, formsMap, formElementsMap, internalsMap, onSubmitMap } from './maps.js';
 import { ICustomElement, IElementInternals, LabelsList } from './types.js';
 
-const observerConfig: MutationObserverInit = { attributes: true };
+const observerConfig: MutationObserverInit = { attributes: true, attributeFilter: ['disabled'] };
 
 const observer = new MutationObserver((mutationsList: MutationRecord[]) => {
   for (const mutation of mutationsList) {
-    const attributeName = mutation.attributeName;
     const target = mutation.target as ICustomElement;
 
-    if (attributeName === 'disabled' && target.constructor['formAssociated']) {
+    if (target.constructor['formAssociated']) {
+      const isDisabled = target.hasAttribute('disabled');
+      target.toggleAttribute('internals-disabled', isDisabled);
       if (target.formDisabledCallback) {
         target.formDisabledCallback.apply(target, [target.hasAttribute('disabled')]);
       }
     }
   }
 });
-
-/** Recursively get the host root */
-export const getHostRoot = (node: Node): Node&ParentNode => {
-  if (node instanceof Document) {
-    return node;
-  }
-  let parent = node.parentNode;
-  if (parent && parent.toString() !== '[object ShadowRoot]') {
-    parent = getHostRoot(parent);
-  }
-  return parent;
-};
 
 /**
  * Removes all hidden inputs for the given element internals instance
@@ -65,6 +54,10 @@ export const createHiddenInput = (ref: ICustomElement, internals: IElementIntern
  */
 export const initRef = (ref: ICustomElement, internals: IElementInternals): void => {
   hiddenInputMap.set(internals, []);
+
+  const isDisabled = ref.hasAttribute('disabled');
+  ref.toggleAttribute('internals-disabled', isDisabled);
+
   observer.observe(ref, observerConfig);
 };
 
@@ -95,7 +88,8 @@ export const initLabels = (ref: ICustomElement, labels: LabelsList): void => {
  */
 export const formSubmitCallback = (event: Event) => {
   /** Get the Set of elements attached to this form */
-  const elements = formElementsMap.get(event.target as HTMLFormElement);
+  const form = event.target as HTMLFormElement;
+  const elements = formElementsMap.get(form);
 
   /** If the Set has items, continue */
   if (elements.size) {
@@ -113,6 +107,12 @@ export const formSubmitCallback = (event: Event) => {
       event.stopImmediatePropagation();
       event.stopPropagation();
       event.preventDefault();
+    } else if (onSubmitMap.get(form)) {
+      const callback = onSubmitMap.get(form);
+      const canceled = callback.call(form, event);
+      if (canceled === false) {
+        event.preventDefault();
+      }
     }
   }
 };
@@ -126,12 +126,15 @@ export const formResetCallback = (event: Event) => {
   /** Get the Set of elements attached to this form */
   const elements = formElementsMap.get(event.target as HTMLFormElement);
 
-  /** Loop over the elements and call formResetCallback if applicable */
-  elements.forEach(element => {
-    if ((element.constructor as any).formAssociated && element.formResetCallback) {
-      element.formResetCallback.apply(element);
-    }
-  });
+  /** Some forms won't contain form associated custom elements */
+  if (elements && elements.size) {
+    /** Loop over the elements and call formResetCallback if applicable */
+    elements.forEach(element => {
+      if ((element.constructor as any).formAssociated && element.formResetCallback) {
+        element.formResetCallback.apply(element);
+      }
+    });
+  }
 };
 
 /**
@@ -144,6 +147,13 @@ export const formResetCallback = (event: Event) => {
  */
 export const initForm = (ref: ICustomElement, form: HTMLFormElement, internals: IElementInternals) => {
   if (form) {
+    /** If the form has an onsubmit function, save it and remove it */
+    if (form.onsubmit) {
+      /** TODO: Find a way to parse arguments better */
+      onSubmitMap.set(form, form.onsubmit.bind(form));
+      form.onsubmit = null;
+    }
+
     /** This will be a WeakMap<HTMLFormElement, Set<HTMLElement> */
     const formElements = formElementsMap.get(form);
 
@@ -185,4 +195,56 @@ export const findParentForm = (elem) => {
     parent = findParentForm(elem.host);
   }
   return parent;
+};
+
+/**
+ * Throw an error if the element ref is not form associated
+ * @param ref {ICustomElement} - The element to check if it is form associated
+ * @param message {string} - The error message to throw
+ * @param ErrorType {any} - The error type to throw, defaults to DOMException
+ */
+export const throwIfNotFormAssociated = (ref: ICustomElement, message: string, ErrorType: any = DOMException): void => {
+  if (!ref.constructor['formAssociated']) {
+    throw new ErrorType(message);
+  }
+}
+
+/**
+ * Called for each HTMLFormElement.checkValidity|reportValidity
+ * will loop over a form's added components and call the respective
+ * method modifying the default return value if needed
+ * @param form {HTMLFormElement} - The form element to run the method on
+ * @param returnValue {boolean} - The initial result of the original method
+ * @param method {'checkValidity'|'reportValidity'} - The original method
+ * @returns {boolean} The form's validity state
+ */
+export const overrideFormMethod = (form: HTMLFormElement, returnValue: boolean, method: 'checkValidity'|'reportValidity'): boolean => {
+  const elements = formElementsMap.get(form);
+
+  /** Some forms won't contain form associated custom elements */
+  if (elements && elements.size) {
+    elements.forEach(element => {
+      const internals = internalsMap.get(element);
+      const valid = internals[method]();
+      if (!valid) {
+        returnValue = false;
+      }
+    });
+  }
+  return returnValue;
+};
+
+/**
+ * Will upgrade an ElementInternals instance by initializing the
+ * instance's form and labels. This is called when the element is
+ * either constructed or appended from a DocumentFragment
+ * @param ref {ICustomElement} - The custom element to upgrade
+ */
+export const upgradeInternals = (ref: ICustomElement) => {
+  if (ref.constructor['formAssociated']) {
+    const internals = internalsMap.get(ref);
+    const { labels, form } = internals;
+    initLabels(ref, labels);
+    initForm(ref, form, internals);
+  }
 };

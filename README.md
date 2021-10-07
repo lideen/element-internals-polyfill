@@ -27,6 +27,11 @@ yarn:
 yarn add element-internals-polyfill
 ```
 
+skypack:
+```javascript
+import 'https://cdn.skypack.dev/element-internals-polyfill';
+```
+
 unpkg:
 ```javascript
 import 'https://unpkg.com/element-internals-polyfill';
@@ -127,10 +132,43 @@ In addition to form controls, `ElementInternals` will also surface several acces
 - `ariaValueNow`: 'aria-valuenow'
 - `ariaValueText`: 'aria-valuetext'
 
+### State API
+
+`ElementInternals` exposes an API for creating custom states on an element. For instance if a developer wanted to signify to users that an element was in state `foo`, they could call `internals.states.set('--foo')`. This would make the element match the selector `:--foo`. Unfortunately in non-supporting browsers this is an invalid selector and will throw an error in JS and would cause the parsing of a CSS rule to fail. As a result, this polyfill will add states using the `state--foo` attribute to the host element.
+
+In order to properly select these elements in CSS, you will need to duplicate your rule as follows:
+
+```css
+/** Supporting browsers */
+:--foo { 
+  color: rebeccapurple;
+}
+
+/** Polyfilled browsers */
+[state--foo] {
+  color: rebeccapurple;
+}
+```
+
+Trying to combine selectors like `:--foo, [state--foo]` will cause the parsing of the rule to fail because `:--foo` is an invalid selector. As a potential optimization, you can use CSS `@supports` as follows:
+
+```css
+@supports selector(:--foo) {
+  /** Native supporting code here */
+}
+
+@supports not selector([state--foo]) {
+  /** Code for polyfilled browsers here */
+}
+```
+
+Be sure to understand how your supported browsers work with CSS `@supports` before using the above strategy.
+
 ## Current limitations
 
 - Right now providing a cross-browser compliant version of `ElementInternals.reportValidity` is not supported. The method essentially behaves as a proxy for `ElementInternals.checkValidity`.
 - The polyfill does support the outcomes of the [Accessibility Object Model](https://wicg.github.io/aom/explainer.html#) for applying accessibility rules on the DOM object. However, the spec states that updates using AOM will not be reflected by DOM attributes, but only on the element's accesibility object. However, to emulate this behavior before it is fully supported, it is necessary to use the attributes. If you choose to use this feature, please note that behavior in polyfilled browsers and non-polyfilled browsers will be different; however, the outcome for users will be the same.
+- It is currently impossible to set form states to `:invalid` and `:valid` so this polyfill replaces those with the `[internals-invalid]` and `[internals-valid]` attributes on the host element. The proper selector for invalid elements will be `:host(:invalid), :host([internals-invalid])`.
 
 ## A note about versioning
 

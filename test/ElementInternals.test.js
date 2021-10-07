@@ -10,6 +10,11 @@ import '../dist/index.js';
 let callCount = 0;
 let internalsAvailableInFormAssociatedCallback = false;
 
+window.onFormSubmit = (event) => {
+  event.preventDefault();
+  callCount += 1;
+};
+
 class CustomElement extends HTMLElement {
   static get formAssociated() {
     return true;
@@ -104,8 +109,8 @@ describe('The ElementInternals polyfill', () => {
     });
   });
 
-  describe('inside a custom element without a form', () => {
-    let el, internals;
+  describe('Non-formAssociated elements', () => {
+    let element, internals;
 
     class NotFormAssociated extends HTMLElement {
       constructor() {
@@ -113,24 +118,21 @@ describe('The ElementInternals polyfill', () => {
         this.internals = this.attachInternals();
       }
     }
+
     customElements.define('not-associated', NotFormAssociated);
 
     beforeEach(async () => {
-      el = await fixture(html`<test-el></test-el>`);
-      internals = el.internals;
+      element = await fixture(html`<not-associated></not-associated>`);
     });
 
-    afterEach(async () => fixtureCleanup(el));
+    afterEach(async () => await fixtureCleanup(element));
 
     it('will attach an object to internals even if not form associated', async () => {
-      const nonAssociated = await fixture(html`
-        <not-associated></not-associated>`
-      );
-      expect(nonAssociated.internals).to.exist;
+      expect(element.internals).to.exist;
     });
 
-    it('will return undefined from setFormValue', async () => {
-      expect(internals.setFormValue('foo')).to.equal(undefined);
+    it('will throw from setFormValue', async () => {
+      expect(() => element.internals.setFormValue('foo')).to.throw();
     });
   });
 
@@ -230,6 +232,13 @@ describe('The ElementInternals polyfill', () => {
           valueMissing: true
         });
       }).to.throw();
+    });
+
+    it ('will accept ValidityState from a native form input', () => {
+      el.input.required = true;
+      el.input.reportValidity();
+      internals.setValidity(el.input.validity, el.input.validationMessage, el.input);
+      expect(internals.validity.valueMissing).to.be.true;
     });
 
     it('will return true for willValidate if the field can participate in the form', () => {
@@ -376,7 +385,17 @@ describe('The ElementInternals polyfill', () => {
     it('will accept empty strings', () => {
       internals.setFormValue('');
       expect(new FormData(internals.form).get('foo')).to.equal('');
-    })
+    });
+
+    it('will set the form to the proper validity state', async () => {
+      internals.setValidity({ valueMissing: true }, 'Error message');
+      expect(form.checkValidity()).to.be.false;
+      expect(form.reportValidity()).to.be.false;
+
+      internals.setValidity({});
+      expect(form.checkValidity()).to.be.true;
+      expect(form.reportValidity()).to.be.true;
+    });
   });
 
   describe('closed shadow root element', () => {
@@ -405,6 +424,38 @@ describe('The ElementInternals polyfill', () => {
 
     it('maintains a reference to closed shadow roots', () => {
       expect(internals.shadowRoot).to.equal(shadowRoot);
+    });
+  });
+
+  describe('Forms with onsubmit', () => {
+    let form;
+    let el;
+    let internals;
+    let button;
+
+    beforeEach(async () => {
+      form = await fixture(html`<form onsubmit="onFormSubmit(event)">
+        <test-el></test-el>
+        <button type="submit">Submit</button>
+      </form>`);
+      el = form.querySelector('test-el');
+      internals = el.internals;
+      button = form.querySelector('button');
+      callCount = 0;
+    });
+
+    it('will not call onsubmit if invalid', async () => {
+      expect(callCount).to.equal(0);
+      internals.setValidity({ valueMissing: true }, 'Error message');
+      button.click();
+      expect(callCount).to.equal(0);
+    });
+
+    it('will call onsubmit if valid', async () => {
+      expect(callCount).to.equal(0);
+      internals.setValidity({});
+      button.click();
+      expect(callCount).to.equal(1);
     });
   });
 });
