@@ -2,7 +2,10 @@ import { upgradeMap } from "./maps.js";
 import { setAttribute } from "./utils.js";
 import "./types.js";
 
-export const aom: Record<keyof ARIAMixin, string> = {
+const PROPERTY_ONLY = Symbol("PROPERTY_ONLY");
+
+export const aom: Record<keyof ARIAMixin, string | symbol> = {
+  ariaActiveDescendantElement: PROPERTY_ONLY,
   ariaAtomic: "aria-atomic",
   ariaAutoComplete: "aria-autocomplete",
   ariaBrailleLabel: "aria-braillelabel",
@@ -13,21 +16,28 @@ export const aom: Record<keyof ARIAMixin, string> = {
   ariaColIndex: "aria-colindex",
   ariaColIndexText: "aria-colindextext",
   ariaColSpan: "aria-colspan",
+  ariaControlsElements: PROPERTY_ONLY,
   ariaCurrent: "aria-current",
+  ariaDescribedByElements: PROPERTY_ONLY,
   ariaDescription: "aria-description",
+  ariaDetailsElements: PROPERTY_ONLY,
   ariaDisabled: "aria-disabled",
+  ariaErrorMessageElements: PROPERTY_ONLY,
   ariaExpanded: "aria-expanded",
+  ariaFlowToElements: PROPERTY_ONLY,
   ariaHasPopup: "aria-haspopup",
   ariaHidden: "aria-hidden",
   ariaInvalid: "aria-invalid",
   ariaKeyShortcuts: "aria-keyshortcuts",
   ariaLabel: "aria-label",
+  ariaLabelledByElements: PROPERTY_ONLY,
   ariaLevel: "aria-level",
   ariaLive: "aria-live",
   ariaModal: "aria-modal",
   ariaMultiLine: "aria-multiline",
   ariaMultiSelectable: "aria-multiselectable",
   ariaOrientation: "aria-orientation",
+  ariaOwnsElements: PROPERTY_ONLY,
   ariaPlaceholder: "aria-placeholder",
   ariaPosInSet: "aria-posinset",
   ariaPressed: "aria-pressed",
@@ -65,7 +75,11 @@ export const initAom = (
       set(value) {
         closureValue = value;
         if (ref.isConnected) {
-          setAttribute(ref, attributeName, value);
+          if (attributeName === PROPERTY_ONLY) {
+            ref[attributeName] = value;
+          } else {
+            setAttribute(ref, attributeName, value);
+          }
         } else {
           upgradeMap.set(ref, internals);
         }

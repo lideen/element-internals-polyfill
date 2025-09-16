@@ -35,6 +35,7 @@ import { CustomStateSet } from "./CustomStateSet.js";
 import { patchFormPrototype } from "./patch-form-prototype.js";
 
 export class ElementInternals implements globalThis.ElementInternals {
+  ariaActiveDescendantElement: Element;
   ariaAtomic: string;
   ariaAutoComplete: string;
   ariaBrailleLabel: string;
@@ -45,21 +46,28 @@ export class ElementInternals implements globalThis.ElementInternals {
   ariaColIndex: string;
   ariaColIndexText: string;
   ariaColSpan: string;
+  ariaControlsElements: readonly Element[];
   ariaCurrent: string;
+  ariaDescribedByElements: readonly Element[];
   ariaDescription: string;
+  ariaDetailsElements: readonly Element[];
   ariaDisabled: string;
+  ariaErrorMessageElements: readonly Element[];
   ariaExpanded: string;
+  ariaFlowToElements: readonly Element[];
   ariaHasPopup: string;
   ariaHidden: string;
   ariaInvalid: string;
   ariaKeyShortcuts: string;
   ariaLabel: string;
+  ariaLabelledByElements: readonly Element[];
   ariaLevel: string;
   ariaLive: string;
   ariaModal: string;
   ariaMultiLine: string;
   ariaMultiSelectable: string;
   ariaOrientation: string;
+  ariaOwnsElements: readonly Element[];
   ariaPlaceholder: string;
   ariaPosInSet: string;
   ariaPressed: string;
